@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>爱心动画与文字效果</title>
+  <style>
+    html, body {
+      height: 100%;
+      padding: 0;
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    
+    canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+    
+    .text-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      opacity: 0;
+      transition: opacity 1s ease-in-out;
+      z-index: 10;
+    }
+    
+    #text1, #text2, #text3 {
+      font-size: 3rem;
+      color: #fff;
+      text-shadow: 0 0 10px #ff30c5;
+      font-family: 'Arial', sans-serif;
+    }
+    
+    #text1 span {
+      opacity: 0;
+      display: inline-block;
+    }
+    
+    #audio-player {
+      position: fixed;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      visibility: hidden;
+    }
+    
+    /* 添加音乐播放提示 */
+    .music-hint {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.9rem;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 1s ease-in-out;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="pinkboard"></canvas>
+  <div class="text-container" id="text1"></div>
+  <div class="text-container" id="text2">考完放松放松</div>
+  <div class="text-container" id="text3">给你带来一首歌</div>
+  
+  <!-- 隐藏的音频元素 -->
+  <audio id="audio-player" loop>
+    <source src="zhusong.m4a" type="audio/mp4">
+    您的浏览器不支持音频元素。
+  </audio>
+  
+  <!-- 音乐播放提示 -->
+  <div class="music-hint" id="music-hint">音乐播放中...</div>
+
+  <script>
+    // 爱心粒子动画代码
+    var settings = {
+      particles: {
+        length: 500,
+        duration: 2,
+        velocity: 100,
+        effect: -0.75,
+        size: 30,
+      },
+    };
+
+    (function(){
+      var b=0;
+      var c=["ms","moz","webkit","o"];
+      for(var a=0;a<c.length&&!window.requestAnimationFrame;++a){
+        window.requestAnimationFrame=window[c[a]+"RequestAnimationFrame"];
+        window.cancelAnimationFrame=window[c[a]+"CancelAnimationFrame"]||window[c[a]+"CancelRequestAnimationFrame"]
+      }
+      if(!window.requestAnimationFrame){
+        window.requestAnimationFrame=function(h,e){
+          var d=new Date().getTime();
+          var f=Math.max(0,16-(d-b));
+          var g=window.setTimeout(function(){h(d+f)},f);b=d+f;return g}}if(!window.cancelAnimationFrame){window.cancelAnimationFrame=function(d){clearTimeout(d)}}}());
+
+    var Point = (function() {
+      function Point(x, y) {
+        this.x = (typeof x !== 'undefined') ? x : 0;
+        this.y = (typeof y !== 'undefined') ? y : 0;
+      }
+      Point.prototype.clone = function() {
+        return new Point(this.x, this.y);
+      };
+      Point.prototype.length = function(length) {
+        if (typeof length == 'undefined')
+          return Math.sqrt(this.x * this.x + this.y * this.y);
+        this.normalize();
+        this.x *= length;
+        this.y *= length;
+        return this;
+      };
+      Point.prototype.normalize = function() {
+        var length = this.length();
+        this.x /= length;
+        this.y /= length;
+        return this;
+      };
+      return Point;
+    })();
+
+    var Particle = (function() {
+      function Particle() {
+        this.position = new Point();
+        this.velocity = new Point();
+        this.acceleration = new Point();
+        this.age = 0;
+      }
+      Particle.prototype.initialize = function(x, y, dx, dy) {
+        this.position.x = x;
+        this.position.y = y;
+        this.velocity.x = dx;
+        this.velocity.y = dy;
+        this.acceleration.x = dx * settings.particles.effect;
+        this.acceleration.y = dy * settings.particles.effect;
+        this.age = 0;
+      };
+      Particle.prototype.update = function(deltaTime) {
+        this.position.x += this.velocity.x * deltaTime;
+        this.position.y += this.velocity.y * deltaTime;
+        this.velocity.x += this.acceleration.x * deltaTime;
+        this.velocity.y += this.acceleration.y * deltaTime;
+        this.age += deltaTime;
+      };
+      Particle.prototype.draw = function(context, image) {
+        function ease(t) {
+          return (--t) * t * t + 1;
+        }
+        var size = image.width * ease(this.age / settings.particles.duration);
+        context.globalAlpha = 1 - this.age / settings.particles.duration;
+        context.drawImage(image, this.position.x - size / 2, this.position.y - size / 2, size, size);
+      };
+      return Particle;
+    })();
+
+    var ParticlePool = (function() {
+      var particles,
+          firstActive = 0,
+          firstFree = 0,
+          duration = settings.particles.duration;
+      function ParticlePool(length) {
+        particles = new Array(length);
+        for (var i = 0; i < particles.length; i++)
+          particles[i] = new Particle();
+      }
+      ParticlePool.prototype.add = function(x, y, dx, dy) {
+        particles[firstFree].initialize(x, y, dx, dy);
+        firstFree++;
+        if (firstFree == particles.length) firstFree = 0;
+        if (firstActive == firstFree ) firstActive++;
+        if (firstActive == particles.length) firstActive = 0;
+      };
+      ParticlePool.prototype.update = function(deltaTime) {
+        var i;
+        if (firstActive < firstFree) {
+          for (i = firstActive; i < firstFree; i++)
+            particles[i].update(deltaTime);
+        }
+        if (firstFree < firstActive) {
+          for (i = firstActive; i < particles.length; i++)
+            particles[i].update(deltaTime);
+          for (i = 0; i < firstFree; i++)
+            particles[i].update(deltaTime);
+        }
+        while (particles[firstActive].age >= duration && firstActive != firstFree) {
+          firstActive++;
+          if (firstActive == particles.length) firstActive = 0;
+        }
+      };
+      ParticlePool.prototype.draw = function(context, image) {
+        if (firstActive < firstFree) {
+          for (i = firstActive; i < firstFree; i++)
+            particles[i].draw(context, image);
+        }
+        if (firstFree < firstActive) {
+          for (i = firstActive; i < particles.length; i++)
+            particles[i].draw(context, image);
+          for (i = 0; i < firstFree; i++)
+            particles[i].draw(context, image);
+        }
+      };
+      return ParticlePool;
+    })();
+
+    (function(canvas) {
+      var context = canvas.getContext('2d'),
+          particles = new ParticlePool(settings.particles.length),
+          particleRate = settings.particles.length / settings.particles.duration,
+          time;
+
+      function pointOnHeart(t) {
+        return new Point(
+          160 * Math.pow(Math.sin(t), 3),
+          130 * Math.cos(t) - 50 * Math.cos(2 * t) - 20 * Math.cos(3 * t) - 10 * Math.cos(4 * t) + 25
+        );
+      }
+
+      var image = (function() {
+        var canvas = document.createElement('canvas'),
+            context = canvas.getContext('2d');
+        canvas.width = settings.particles.size;
+        canvas.height = settings.particles.size;
+        function to(t) {
+          var point = pointOnHeart(t);
+          point.x = settings.particles.size / 2 + point.x * settings.particles.size / 350;
+          point.y = settings.particles.size / 2 - point.y * settings.particles.size / 350;
+          return point;
+        }
+        context.beginPath();
+        var t = -Math.PI;
+        var point = to(t);
+        context.moveTo(point.x, point.y);
+        while (t < Math.PI) {
+          t += 0.01;
+          point = to(t);
+          context.lineTo(point.x, point.y);
+        }
+        context.closePath();
+        context.fillStyle = '#ff30c5';
+        context.fill();
+        var image = new Image();
+        image.src = canvas.toDataURL();
+        return image;
+      })();
+
+      function render() {
+        requestAnimationFrame(render);
+        var newTime = new Date().getTime() / 1000,
+            deltaTime = newTime - (time || newTime);
+        time = newTime;
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        var amount = particleRate * deltaTime;
+        for (var i = 0; i < amount; i++) {
+          var pos = pointOnHeart(Math.PI - 2 * Math.PI * Math.random());
+          var dir = pos.clone().length(settings.particles.velocity);
+          particles.add(canvas.width / 2 + pos.x, canvas.height / 2 - pos.y, dir.x, -dir.y);
+        }
+        particles.update(deltaTime);
+        particles.draw(context, image);
+      }
+
+      function onResize() {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+      }
+      window.onresize = onResize;
+      
+      setTimeout(function() {
+        onResize();
+        render();
+      }, 10);
+    })(document.getElementById('pinkboard'));
+
+    // 文字动画控制代码
+    const text1 = "lchsorry";
+    const text1Element = document.getElementById('text1');
+    const text2Element = document.getElementById('text2');
+    const text3Element = document.getElementById('text3');
+    const audioPlayer = document.getElementById('audio-player');
+    const musicHint = document.getElementById('music-hint');
+
+    function showText1() {
+      text1Element.innerHTML = '';
+      
+      for (let i = 0; i < text1.length; i++) {
+        const span = document.createElement('span');
+        span.textContent = text1[i];
+        text1Element.appendChild(span);
+        
+        setTimeout(() => {
+          span.style.opacity = '1';
+          span.style.transform = 'translateY(0)';
+          span.style.transition = 'opacity 0.3s ease-in-out, transform 0.3s ease-in-out';
+        }, i * 300);
+      }
+      
+      text1Element.style.opacity = '1';
+      
+      setTimeout(() => {
+        text1Element.style.opacity = '0';
+        setTimeout(showText2, 1000);
+      }, 3000);
+    }
+    
+    function showText2() {
+      text2Element.style.opacity = '1';
+      
+      setTimeout(() => {
+        text2Element.style.opacity = '0';
+        setTimeout(showText3, 1000);
+      }, 2000);
+    }
+    
+    function showText3() {
+      text3Element.style.opacity = '1';
+      
+      setTimeout(() => {
+        text3Element.style.opacity = '0';
+        
+        // 自动播放音乐并显示提示
+        setTimeout(() => {
+          audioPlayer.play()
+            .then(() => {
+              musicHint.style.opacity = '1';
+              setTimeout(() => {
+                musicHint.style.opacity = '0';
+              }, 3000);
+            })
+            .catch(error => {
+              console.error('自动播放失败:', error);
+              // 如果自动播放被阻止，显示提示让用户交互
+              musicHint.textContent = '点击页面以播放音乐';
+              musicHint.style.opacity = '1';
+              musicHint.style.cursor = 'pointer';
+              musicHint.onclick = () => {
+                audioPlayer.play();
+                musicHint.style.opacity = '0';
+              };
+            });
+        }, 1000);
+      }, 2000);
+    }
+    
+    // 页面加载后延迟500ms开始文字动画
+    window.addEventListener('load', () => {
+      setTimeout(showText1, 500);
+    });
+    
+    // 处理移动端自动播放限制
+    document.addEventListener('click', function() {
+      // 尝试恢复音频上下文（针对移动端）
+      if (audioPlayer.paused) {
+        audioPlayer.play();
+      }
+    }, { once: true });
+  </script>
+</body>
+</html>
